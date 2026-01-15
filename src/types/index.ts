@@ -1,7 +1,9 @@
 // src/types/index.ts
 // Summary: Shared type definitions for the ERP demo.
+// Integrations:
+// - Used across pages and storage layer to keep localStorage data consistent.
 // Notes:
-// - Extended StockMovement.referenceType to include 'incoming-invoice' while keeping 'purchase' for backward compatibility.
+// - StockMovement.referenceType supports both 'purchase' (legacy) and 'incoming-invoice' (canonical).
 
 export type CompanyMode = 'isletme-defteri' | 'genel-muhasebe'
 export type UserRole = 'mukellef' | 'mali-musavir'
@@ -123,13 +125,15 @@ export interface StockItem {
   createdAt: string
 }
 
+export type StockMovementReferenceType = 'invoice' | 'purchase' | 'incoming-invoice' | 'manual'
+
 export interface StockMovement {
   id: string
   companyId: string
   stockItemId: string
   type: 'in' | 'out'
   quantity: number
-  referenceType: 'invoice' | 'purchase' | 'incoming-invoice' | 'manual'
+  referenceType: StockMovementReferenceType
   referenceId: string
   date: string
   createdAt: string
@@ -159,6 +163,7 @@ export interface Service {
 
 export type PaymentType = 'kasa' | 'banka' | 'cek' | 'senet'
 export type PaymentDirection = 'tahsilat' | 'odeme'
+export type PaymentReferenceType = 'invoice' | 'incoming-invoice' | 'manual'
 
 export interface Payment {
   id: string
@@ -167,7 +172,7 @@ export interface Payment {
   direction: PaymentDirection
   amount: number
   description: string
-  referenceType: 'invoice' | 'incoming-invoice' | 'manual'
+  referenceType: PaymentReferenceType
   referenceId?: string
   date: string
   createdAt: string
