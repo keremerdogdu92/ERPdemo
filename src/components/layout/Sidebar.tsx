@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { storage } from '@/lib/storage'
+import type { UserRole } from '@/types'
 
 interface MenuItem {
   title: string
@@ -92,7 +93,7 @@ const menuItems: MenuItem[] = [
 
 export function Sidebar() {
   const location = useLocation()
-  const role = storage.getRole()
+  const [role, setRole] = useState<UserRole>(storage.getRole())
   const isMaliMusavir = role === 'mali-musavir'
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
     const saved = getExpandedState()
@@ -131,6 +132,13 @@ export function Sidebar() {
       ...prev,
       [groupTitle]: !prev[groupTitle],
     }))
+  }
+
+  const handleRoleToggle = (newRole: UserRole) => {
+    if (role !== newRole) {
+      setRole(newRole)
+      storage.setRole(newRole)
+    }
   }
 
   const muhasebeItems: MenuItem[] = isMaliMusavir
@@ -241,6 +249,40 @@ export function Sidebar() {
           <span className="text-sm font-medium">Ayarlar</span>
         </Link>
       </nav>
+
+      {/* Role Toggle */}
+      <div className="mt-8 pt-4 border-t border-slate-700">
+        <div className="px-2 mb-2">
+          <p className="text-xs text-slate-400 mb-2">Görünüm Modu</p>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
+          <button
+            onClick={() => handleRoleToggle('mukellef')}
+            className={cn(
+              'flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all',
+              role === 'mukellef'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            )}
+          >
+            Mükellef
+          </button>
+          <button
+            onClick={() => handleRoleToggle('mali-musavir')}
+            className={cn(
+              'flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all',
+              role === 'mali-musavir'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            )}
+          >
+            Mali Müşavir
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 mt-2 px-2 text-center">
+          {role === 'mukellef' ? 'Mükellef Görünümü' : 'Mali Müşavir Görünümü'}
+        </p>
+      </div>
     </div>
   )
 }

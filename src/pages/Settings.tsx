@@ -1,22 +1,14 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { storage } from '@/lib/storage'
 import { seedDemoData } from '@/lib/seed'
-import type { UserRole } from '@/types'
 
 export function Settings() {
   const navigate = useNavigate()
-  const [role, setRole] = useState<UserRole>(storage.getRole())
+  const role = storage.getRole()
   const company = storage.getCompany()
-
-  const handleRoleChange = (newRole: UserRole) => {
-    setRole(newRole)
-    storage.setRole(newRole)
-  }
 
   const handleResetDemo = () => {
     if (confirm('Demo verilerini sıfırlamak istediğinize emin misiniz?')) {
@@ -46,22 +38,22 @@ export function Settings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Rol Seçimi</CardTitle>
+          <CardTitle>Görünüm Modu</CardTitle>
           <CardDescription>
-            Uygulamada görüntülenecek menüleri belirlemek için rolünüzü seçin.
+            Mevcut görünüm modunuz. Değiştirmek için sol menüdeki toggle kullanın.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="role">Rol</Label>
-            <Select
-              id="role"
-              value={role}
-              onChange={(e) => handleRoleChange(e.target.value as UserRole)}
-            >
-              <option value="mukellef">Mükellef</option>
-              <option value="mali-musavir">Mali Müşavir</option>
-            </Select>
+            <Label>Mevcut Mod</Label>
+            <p className="text-sm font-medium">
+              {role === 'mukellef' ? 'Mükellef Görünümü' : 'Mali Müşavir Görünümü'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {role === 'mukellef'
+                ? 'Standart kullanıcı görünümü aktif.'
+                : 'Mali Müşavir menüleri görünür durumda.'}
+            </p>
           </div>
         </CardContent>
       </Card>
