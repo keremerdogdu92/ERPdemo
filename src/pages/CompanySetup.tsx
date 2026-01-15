@@ -1,292 +1,201 @@
-// src/components/layout/Sidebar.tsx
-// Summary: Main left sidebar navigation for the demo app.
-// - Renders collapsible menu groups (no navigation on group headers).
-// - Persists expanded/collapsed state to localStorage.
-// - Shows additional "Mali Müşavir" menus when role is 'mali-musavir'.
-// - Pins the RoleModeToggle to the bottom of the sidebar so it doesn't move as menus grow.
+// src/pages/CompanySetup.tsx
+// Summary: First-run company setup form for the ERP demo.
+// - Collects company name, tax identity (TC Kimlik No or Vergi No based on selected mode), address, and accounting mode.
+// - Performs client-side validation and normalization for identity number input (digits-only, fixed length).
 // Integrations:
-// - storage.getRole / storage.setRole uses localStorage key 'qnowa_role'.
-// - RoleModeToggle renders an iOS-style role switch (single track + sliding knob).
-// - Brand logo is served from Vite public path: /brand/qnowa-logo.png
-// Notes:
-// - Routes are not protected; role controls only menu visibility (demo behavior).
+// - Persists company via storage.setCompany()
+// - Seeds demo records via seedDemoData()
+// - Redirects to dashboard via react-router navigate()
 
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import type { ComponentType } from 'react'
-import {
-  FileText,
-  FileDown,
-  CreditCard,
-  Package,
-  BookOpen,
-  FileCheck,
-  Settings,
-  LayoutDashboard,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
 import { storage } from '@/lib/storage'
-import type { UserRole } from '@/types'
-import { RoleModeToggle } from './RoleModeToggle'
+import { seedDemoData } from '@/lib/seed'
+import type { CompanyMode } from '@/types'
 
-interface MenuItem {
-  title: string
-  icon: ComponentType<{ className?: string }>
-  path?: string
-  children?: { title: string; path: string }[]
-  isGroup?: boolean
+type FormState = {
+  name: string
+  taxId: string
+  address: string
+  mode: CompanyMode
 }
 
-const STORAGE_KEY_EXPANDED = 'qnowa_sidebar_expanded'
-
-function getExpandedState(): Record<string, boolean> {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_EXPANDED)
-    return stored ? JSON.parse(stored) : {}
-  } catch {
-    return {}
-  }
+function digitsOnly(value: string): string {
+  // Security/UX: harden against non-numeric input by stripping everything except digits.
+  return value.replace(/\D/g, '')
 }
 
-function saveExpandedState(state: Record<string, boolean>) {
-  try {
-    localStorage.setItem(STORAGE_KEY_EXPANDED, JSON.stringify(state))
-  } catch {
-    // Ignore storage errors (private mode / quota)
-  }
-}
+export function CompanySetup() {
+  const navigate = useNavigate()
+  const [error, setError] = useState<string | null>(null)
 
-const baseMenuItems: MenuItem[] = [
-  {
-    title: 'Dashboard',
-    icon: LayoutDashboard,
-    path: '/',
-  },
-  {
-    title: 'Fatura',
-    icon: FileText,
-    isGroup: true,
-    children: [
-      { title: 'Yeni Fatura Oluştur', path: '/fatura/yeni' },
-      { title: 'Günlük Z Raporu Giriş', path: '/fatura/z-raporu' },
-      { title: 'Satış Belge Görüntüle', path: '/fatura/satis' },
-    ],
-  },
-  {
-    title: 'Gelen Faturalar',
-    icon: FileDown,
-    isGroup: true,
-    children: [
-      { title: 'Gelen Faturalar', path: '/gelen-fatura/liste' },
-      { title: 'Alış Belge Görüntüle', path: '/gelen-fatura/alis' },
-    ],
-  },
-  {
-    title: 'Ödeme ve Tahsilat',
-    icon: CreditCard,
-    isGroup: true,
-    children: [
-      { title: 'Tahsilat Ekle', path: '/odeme-tahsilat/tahsilat' },
-      { title: 'Ödeme Ekle', path: '/odeme-tahsilat/odeme' },
-      { title: 'Pozisyon Özeti', path: '/odeme-tahsilat/pozisyon' },
-    ],
-  },
-  {
-    title: 'Envanter ve Hizmetler',
-    icon: Package,
-    isGroup: true,
-    children: [
-      { title: 'Stok Kartı', path: '/envanter/stok' },
-      { title: 'Stok Hareketleri', path: '/envanter/stok-hareketleri' },
-      { title: 'Giderler', path: '/envanter/giderler' },
-      { title: 'Hizmetler', path: '/envanter/hizmetler' },
-    ],
-  },
-]
-
-export function Sidebar() {
-  const location = useLocation()
-  const [role, setRole] = useState<UserRole>(storage.getRole())
-  const isMaliMusavir = role === 'mali-musavir'
-
-  const muhasebeItems: MenuItem[] = useMemo(() => {
-    if (!isMaliMusavir) return []
-
-    return [
-      {
-        title: 'Muhasebeleştirme',
-        icon: BookOpen,
-        isGroup: true,
-        children: [
-          { title: 'Satış Faturaları', path: '/muhasebe/satis' },
-          { title: 'Alış Faturaları', path: '/muhasebe/alis' },
-          { title: 'ÖKC Fişleri', path: '/muhasebe/okc' },
-          { title: 'Z Raporları', path: '/muhasebe/z-raporu' },
-        ],
-      },
-      {
-        title: 'Defter Beyan',
-        icon: FileCheck,
-        path: '/defter-beyan',
-      },
-    ]
-  }, [isMaliMusavir])
-
-  const allMenuItems = useMemo(() => [...baseMenuItems, ...muhasebeItems], [muhasebeItems])
-
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
-    const saved = getExpandedState()
-    const initial: Record<string, boolean> = { ...saved }
-
-    // Auto-expand groups if current route matches a child.
-    allMenuItems.forEach((item) => {
-      if (item.isGroup && item.children) {
-        const hasActiveChild = item.children.some(
-          (child) => location.pathname === child.path || location.pathname.startsWith(child.path + '/')
-        )
-        if (hasActiveChild && initial[item.title] === undefined) {
-          initial[item.title] = true
-        }
-      }
-    })
-
-    return initial
+  const [formData, setFormData] = useState<FormState>({
+    name: '',
+    taxId: '',
+    address: '',
+    mode: 'isletme-defteri',
   })
 
-  // Persist expand/collapse to localStorage for demo stability.
-  useEffect(() => {
-    saveExpandedState(expandedGroups)
-  }, [expandedGroups])
+  const taxIdSpec = useMemo(() => {
+    // Business rule:
+    // - isletme-defteri => TC Kimlik No (11 digits)
+    // - genel-muhasebe  => Vergi No (10 digits)
+    if (formData.mode === 'isletme-defteri') {
+      return {
+        label: 'TC Kimlik No',
+        requiredLength: 11,
+        placeholder: '11 haneli TC Kimlik No',
+      }
+    }
 
-  // When role changes to Mali Müşavir, auto-expand the accounting group if user is already on a /muhasebe route.
-  useEffect(() => {
-    if (!isMaliMusavir) return
-    if (!location.pathname.startsWith('/muhasebe') && !location.pathname.startsWith('/defter-beyan')) return
+    return {
+      label: 'Vergi No',
+      requiredLength: 10,
+      placeholder: '10 haneli Vergi No',
+    }
+  }, [formData.mode])
 
-    setExpandedGroups((prev) => {
-      if (prev['Muhasebeleştirme'] === true) return prev
-      return { ...prev, Muhasebeleştirme: true }
-    })
-  }, [isMaliMusavir, location.pathname])
-
-  const toggleGroup = (groupTitle: string) => {
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [groupTitle]: !prev[groupTitle],
-    }))
+  const handleTaxIdChange = (raw: string) => {
+    const normalized = digitsOnly(raw).slice(0, taxIdSpec.requiredLength)
+    setFormData((prev) => ({ ...prev, taxId: normalized }))
+    if (error) setError(null)
   }
 
-  const handleRoleChange = (newRole: UserRole) => {
-    if (role !== newRole) {
-      setRole(newRole)
-      storage.setRole(newRole)
+  const validate = (): string | null => {
+    const trimmedName = formData.name.trim()
+    const trimmedAddress = formData.address.trim()
+    const normalizedTaxId = digitsOnly(formData.taxId)
+
+    if (!trimmedName) return 'Lütfen firma adını girin.'
+    if (!trimmedAddress) return 'Lütfen adres bilgisini girin.'
+
+    if (normalizedTaxId.length !== taxIdSpec.requiredLength) {
+      return `${taxIdSpec.label} ${taxIdSpec.requiredLength} haneli olmalıdır.`
     }
+
+    // Extra defensive: ensure only digits even if something bypassed input handler.
+    if (!/^\d+$/.test(normalizedTaxId)) {
+      return `${taxIdSpec.label} yalnızca rakamlardan oluşmalıdır.`
+    }
+
+    return null
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+
+    const validationError = validate()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    const company = {
+      id: `company-${Date.now()}`,
+      name: formData.name.trim(),
+      taxId: digitsOnly(formData.taxId),
+      address: formData.address.trim(),
+      mode: formData.mode,
+      createdAt: new Date().toISOString(),
+    }
+
+    storage.setCompany(company)
+    seedDemoData()
+    navigate('/')
   }
 
   return (
-    // Use a column flex layout so the bottom switch is pinned and does not move as menu content grows.
-    <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col">
-      <div className="mb-6 shrink-0">
-        {/* Brand logo (served from /public). Keep it clickable to go Dashboard. */}
-        <Link to="/" className="inline-flex items-center">
-          <img
-            src="/brand/qnowa-logo.png"
-            alt="Qnowa"
-            className="h-12 w-auto"
-            loading="eager"
-            draggable={false}
-          />
-        </Link>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-2xl">
+        <CardHeader>
+          <CardTitle>Firma Bilgileri</CardTitle>
+          <CardDescription>Lütfen firma bilgilerinizi girin ve muhasebe modunu seçin.</CardDescription>
+        </CardHeader>
 
-        <p className="text-sm text-slate-400 mt-2">E-Fatura & Muhasebe</p>
-      </div>
-
-      {/* Navigation becomes scrollable when content is long, keeping bottom switch fixed. */}
-      <nav className="space-y-2 flex-1 overflow-y-auto pr-1">
-        {allMenuItems.map((item) => {
-          if (item.isGroup && item.children) {
-            const isExpanded = expandedGroups[item.title] ?? false
-            const hasActiveChild = item.children.some(
-              (child) => location.pathname === child.path || location.pathname.startsWith(child.path + '/')
-            )
-
-            return (
-              <div key={item.title}>
-                {/* Group header is NOT a Link: it only toggles children visibility. */}
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(item.title)}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                    hasActiveChild ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  )}
-                  aria-expanded={isExpanded}
-                  aria-controls={`sidebar-group-${item.title}`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="text-sm font-medium flex-1 text-left">{item.title}</span>
-                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                </button>
-
-                {isExpanded && (
-                  <div id={`sidebar-group-${item.title}`} className="ml-8 mt-1 space-y-1">
-                    {item.children.map((child) => (
-                      <Link
-                        key={child.path}
-                        to={child.path}
-                        className={cn(
-                          'block px-4 py-2 rounded-lg text-sm transition-colors',
-                          location.pathname === child.path || location.pathname.startsWith(child.path + '/')
-                            ? 'bg-slate-800 text-white'
-                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                        )}
-                      >
-                        {child.title}
-                      </Link>
-                    ))}
-                  </div>
-                )}
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
               </div>
-            )
-          }
+            )}
 
-          // Regular menu item (Dashboard, Defter Beyan, etc.)
-          return (
-            <Link
-              key={item.path}
-              to={item.path!}
-              className={cn(
-                'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                location.pathname === item.path ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              )}
-            >
-              <item.icon className="w-5 h-5" />
-              <span className="text-sm font-medium">{item.title}</span>
-            </Link>
-          )
-        })}
+            <div className="space-y-2">
+              <Label htmlFor="name">Firma Adı</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value })
+                  if (error) setError(null)
+                }}
+                required
+              />
+            </div>
 
-        <Link
-          to="/ayarlar"
-          className={cn(
-            'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors mt-4',
-            location.pathname === '/ayarlar' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-          )}
-        >
-          <Settings className="w-5 h-5" />
-          <span className="text-sm font-medium">Ayarlar</span>
-        </Link>
+            <div className="space-y-2">
+              <Label htmlFor="taxId">{taxIdSpec.label}</Label>
+              <Input
+                id="taxId"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder={taxIdSpec.placeholder}
+                value={formData.taxId}
+                onChange={(e) => handleTaxIdChange(e.target.value)}
+                maxLength={taxIdSpec.requiredLength}
+                required
+              />
+              <p className="text-xs text-muted-foreground">{taxIdSpec.requiredLength} hane, yalnızca rakam.</p>
+            </div>
 
-        {/* Provide a bit of bottom breathing room inside the scroll area so last items don't touch the pinned switch. */}
-        <div className="h-4" />
-      </nav>
+            <div className="space-y-2">
+              <Label htmlFor="address">Adres</Label>
+              <Input
+                id="address"
+                value={formData.address}
+                onChange={(e) => {
+                  setFormData({ ...formData, address: e.target.value })
+                  if (error) setError(null)
+                }}
+                required
+              />
+            </div>
 
-      {/* Pinned bottom area (does not scroll with the menu). */}
-      <div className="shrink-0 pt-2">
-        <RoleModeToggle role={role} onRoleChange={handleRoleChange} />
-      </div>
+            <div className="space-y-2">
+              <Label htmlFor="mode">Muhasebe Modu</Label>
+              <Select
+                id="mode"
+                value={formData.mode}
+                onChange={(e) => {
+                  const nextMode = e.target.value as CompanyMode
+                  setFormData((prev) => {
+                    // When mode changes, re-normalize taxId to the new length rule.
+                    const nextTaxId = digitsOnly(prev.taxId).slice(0, nextMode === 'isletme-defteri' ? 11 : 10)
+                    return { ...prev, mode: nextMode, taxId: nextTaxId }
+                  })
+                  if (error) setError(null)
+                }}
+                required
+              >
+                <option value="isletme-defteri">İşletme Defteri</option>
+                <option value="genel-muhasebe">Genel Muhasebe</option>
+              </Select>
+            </div>
+
+            <Button type="submit" className="w-full">
+              Kaydet ve Devam Et
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }
+
+// Export default as well to be compatible with barrel/index exports and differing import styles.
+export default CompanySetup
