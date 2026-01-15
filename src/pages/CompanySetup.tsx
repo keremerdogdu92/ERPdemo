@@ -2,6 +2,7 @@
 // Summary: First-run company setup form for the ERP demo.
 // - Collects company name, tax identity (TC Kimlik No or Vergi No based on selected mode), address, and accounting mode.
 // - Performs client-side validation and normalization for identity number input (digits-only, fixed length).
+// - Displays Qnowa brand logo in the setup header.
 // Integrations:
 // - Persists company via storage.setCompany()
 // - Seeds demo records via seedDemoData()
@@ -113,8 +114,21 @@ export function CompanySetup() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl">
         <CardHeader>
-          <CardTitle>Firma Bilgileri</CardTitle>
-          <CardDescription>Lütfen firma bilgilerinizi girin ve muhasebe modunu seçin.</CardDescription>
+          {/* Brand logo (served from /public) */}
+          <div className="flex justify-center">
+            <img
+              src="/brand/qnowa-logo2.png"
+              alt="Qnowa"
+              className="h-16 w-auto md:h-20 select-none"
+              draggable={false}
+              loading="eager"
+            />
+          </div>
+
+          <div className="pt-2">
+            <CardTitle>Firma Bilgileri</CardTitle>
+            <CardDescription>Lütfen firma bilgilerinizi girin ve muhasebe modunu seçin.</CardDescription>
+          </div>
         </CardHeader>
 
         <CardContent>
