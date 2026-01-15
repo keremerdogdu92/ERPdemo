@@ -3,6 +3,7 @@
 // - Renders collapsible menu groups (no navigation on group headers).
 // - Persists expanded/collapsed state to localStorage.
 // - Shows additional "Mali Müşavir" menus when role is 'mali-musavir'.
+// - Pins the RoleModeToggle to the bottom of the sidebar so it doesn't move as menus grow.
 // Integrations:
 // - storage.getRole / storage.setRole uses localStorage key 'qnowa_role'.
 // - RoleModeToggle renders an iOS-style role switch (single track + sliding knob).
@@ -139,7 +140,6 @@ export function Sidebar() {
     const initial: Record<string, boolean> = { ...saved }
 
     // Auto-expand groups if current route matches a child.
-    // This improves UX when deep-linking or refreshing on a subpage.
     allMenuItems.forEach((item) => {
       if (item.isGroup && item.children) {
         const hasActiveChild = item.children.some(
@@ -185,13 +185,15 @@ export function Sidebar() {
   }
 
   return (
-    <div className="w-64 bg-slate-900 text-white min-h-screen p-4">
-      <div className="mb-8">
+    // Use a column flex layout so the bottom switch is pinned and does not move as menu content grows.
+    <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col">
+      <div className="mb-6 shrink-0">
         <h1 className="text-2xl font-bold">Qnowa</h1>
         <p className="text-sm text-slate-400">E-Fatura & Muhasebe</p>
       </div>
 
-      <nav className="space-y-2">
+      {/* Navigation becomes scrollable when content is long, keeping bottom switch fixed. */}
+      <nav className="space-y-2 flex-1 overflow-y-auto pr-1">
         {allMenuItems.map((item) => {
           if (item.isGroup && item.children) {
             const isExpanded = expandedGroups[item.title] ?? false
@@ -248,7 +250,9 @@ export function Sidebar() {
               to={item.path!}
               className={cn(
                 'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                location.pathname === item.path ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                location.pathname === item.path
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               )}
             >
               <item.icon className="w-5 h-5" />
@@ -261,15 +265,23 @@ export function Sidebar() {
           to="/ayarlar"
           className={cn(
             'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors mt-4',
-            location.pathname === '/ayarlar' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            location.pathname === '/ayarlar'
+              ? 'bg-slate-800 text-white'
+              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
           )}
         >
           <Settings className="w-5 h-5" />
           <span className="text-sm font-medium">Ayarlar</span>
         </Link>
+
+        {/* Provide a bit of bottom breathing room inside the scroll area so last items don't touch the pinned switch. */}
+        <div className="h-4" />
       </nav>
 
-      <RoleModeToggle role={role} onRoleChange={handleRoleChange} />
+      {/* Pinned bottom area (does not scroll with the menu). */}
+      <div className="shrink-0 pt-2">
+        <RoleModeToggle role={role} onRoleChange={handleRoleChange} />
+      </div>
     </div>
   )
 }
