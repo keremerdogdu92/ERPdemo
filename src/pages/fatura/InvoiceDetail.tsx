@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { storage } from '@/lib/storage'
-import type { InvoiceStatus, InvoiceEvent } from '@/types'
+import type { InvoiceStatus } from '@/types'
 import { ArrowLeft } from 'lucide-react'
 
 const statusFlow: InvoiceStatus[] = [

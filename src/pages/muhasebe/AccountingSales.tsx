@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { storage } from '@/lib/storage'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useState } from 'react'
 import type { AccountingVoucher } from '@/types'
 
@@ -88,7 +88,6 @@ export function AccountingSales() {
   const invoices = storage.getInvoices()
   const vouchers = storage.getVouchers()
   const company = storage.getCompany()!
-  const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null)
   const [voucherPreview, setVoucherPreview] = useState<AccountingVoucher | null>(null)
 
   const invoicesWithVouchers = invoices.map((inv) => {
@@ -99,7 +98,6 @@ export function AccountingSales() {
   const handleGenerateVoucher = (invoiceId: string) => {
     const voucher = generateVoucher(invoiceId, company.mode)
     setVoucherPreview(voucher)
-    setSelectedInvoice(invoiceId)
   }
 
   const handleConfirmVoucher = () => {
@@ -107,7 +105,6 @@ export function AccountingSales() {
       const vouchers = storage.getVouchers()
       storage.setVouchers([...vouchers, voucherPreview])
       setVoucherPreview(null)
-      setSelectedInvoice(null)
       alert('Fiş oluşturuldu.')
     }
   }

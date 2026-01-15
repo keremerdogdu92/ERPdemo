@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { storage } from '@/lib/storage'
-import { TrendingUp, DollarSign, FileText, Clock } from 'lucide-react'
+import { TrendingUp, DollarSign, Clock } from 'lucide-react'
 
 export function Dashboard() {
   const invoices = storage.getInvoices()

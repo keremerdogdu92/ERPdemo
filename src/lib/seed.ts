@@ -7,7 +7,6 @@ import type {
   Customer,
   Supplier,
   StockItem,
-  StockMovement,
   Expense,
   Service,
   Payment,
