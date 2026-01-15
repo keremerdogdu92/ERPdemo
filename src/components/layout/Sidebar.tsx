@@ -1,5 +1,17 @@
-import { useState, useEffect } from 'react'
+// src/components/layout/Sidebar.tsx
+// Summary: Main left sidebar navigation for the demo app.
+// - Renders collapsible menu groups (no navigation on group headers).
+// - Persists expanded/collapsed state to localStorage.
+// - Shows additional "Mali Müşavir" menus when role is 'mali-musavir'.
+// Integrations:
+// - storage.getRole / storage.setRole uses localStorage key 'qnowa_role'.
+// - RoleModeToggle renders an iOS-style role switch (single track + sliding knob).
+// Notes:
+// - Routes are not protected; role controls only menu visibility (demo behavior).
+
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import type { ComponentType } from 'react'
 import {
   FileText,
   FileDown,
@@ -19,7 +31,7 @@ import { RoleModeToggle } from './RoleModeToggle'
 
 interface MenuItem {
   title: string
-  icon: React.ComponentType<{ className?: string }>
+  icon: ComponentType<{ className?: string }>
   path?: string
   children?: { title: string; path: string }[]
   isGroup?: boolean
@@ -40,11 +52,11 @@ function saveExpandedState(state: Record<string, boolean>) {
   try {
     localStorage.setItem(STORAGE_KEY_EXPANDED, JSON.stringify(state))
   } catch {
-    // Ignore storage errors
+    // Ignore storage errors (private mode / quota)
   }
 }
 
-const menuItems: MenuItem[] = [
+const baseMenuItems: MenuItem[] = [
   {
     title: 'Dashboard',
     icon: LayoutDashboard,
@@ -96,12 +108,39 @@ export function Sidebar() {
   const location = useLocation()
   const [role, setRole] = useState<UserRole>(storage.getRole())
   const isMaliMusavir = role === 'mali-musavir'
+
+  const muhasebeItems: MenuItem[] = useMemo(() => {
+    if (!isMaliMusavir) return []
+
+    return [
+      {
+        title: 'Muhasebeleştirme',
+        icon: BookOpen,
+        isGroup: true,
+        children: [
+          { title: 'Satış Faturaları', path: '/muhasebe/satis' },
+          { title: 'Alış Faturaları', path: '/muhasebe/alis' },
+          { title: 'ÖKC Fişleri', path: '/muhasebe/okc' },
+          { title: 'Z Raporları', path: '/muhasebe/z-raporu' },
+        ],
+      },
+      {
+        title: 'Defter Beyan',
+        icon: FileCheck,
+        path: '/defter-beyan',
+      },
+    ]
+  }, [isMaliMusavir])
+
+  const allMenuItems = useMemo(() => [...baseMenuItems, ...muhasebeItems], [muhasebeItems])
+
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
     const saved = getExpandedState()
-    // Auto-expand groups if current route matches a child
     const initial: Record<string, boolean> = { ...saved }
-    
-    menuItems.forEach((item) => {
+
+    // Auto-expand groups if current route matches a child.
+    // This improves UX when deep-linking or refreshing on a subpage.
+    allMenuItems.forEach((item) => {
       if (item.isGroup && item.children) {
         const hasActiveChild = item.children.some(
           (child) => location.pathname === child.path || location.pathname.startsWith(child.path + '/')
@@ -112,21 +151,24 @@ export function Sidebar() {
       }
     })
 
-    if (isMaliMusavir) {
-      const muhasebeGroup = 'Muhasebeleştirme'
-      if (location.pathname.startsWith('/muhasebe') || location.pathname.startsWith('/defter-beyan')) {
-        if (initial[muhasebeGroup] === undefined) {
-          initial[muhasebeGroup] = true
-        }
-      }
-    }
-
     return initial
   })
 
+  // Persist expand/collapse to localStorage for demo stability.
   useEffect(() => {
     saveExpandedState(expandedGroups)
   }, [expandedGroups])
+
+  // When role changes to Mali Müşavir, auto-expand the accounting group if user is already on a /muhasebe route.
+  useEffect(() => {
+    if (!isMaliMusavir) return
+    if (!location.pathname.startsWith('/muhasebe') && !location.pathname.startsWith('/defter-beyan')) return
+
+    setExpandedGroups((prev) => {
+      if (prev['Muhasebeleştirme'] === true) return prev
+      return { ...prev, Muhasebeleştirme: true }
+    })
+  }, [isMaliMusavir, location.pathname])
 
   const toggleGroup = (groupTitle: string) => {
     setExpandedGroups((prev) => ({
@@ -142,35 +184,13 @@ export function Sidebar() {
     }
   }
 
-  const muhasebeItems: MenuItem[] = isMaliMusavir
-    ? [
-        {
-          title: 'Muhasebeleştirme',
-          icon: BookOpen,
-          isGroup: true,
-          children: [
-            { title: 'Satış Faturaları', path: '/muhasebe/satis' },
-            { title: 'Alış Faturaları', path: '/muhasebe/alis' },
-            { title: 'ÖKC Fişleri', path: '/muhasebe/okc' },
-            { title: 'Z Raporları', path: '/muhasebe/z-raporu' },
-          ],
-        },
-        {
-          title: 'Defter Beyan',
-          icon: FileCheck,
-          path: '/defter-beyan',
-        },
-      ]
-    : []
-
-  const allMenuItems = [...menuItems, ...muhasebeItems]
-
   return (
     <div className="w-64 bg-slate-900 text-white min-h-screen p-4">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Qnowa</h1>
         <p className="text-sm text-slate-400">E-Fatura & Muhasebe</p>
       </div>
+
       <nav className="space-y-2">
         {allMenuItems.map((item) => {
           if (item.isGroup && item.children) {
@@ -181,7 +201,9 @@ export function Sidebar() {
 
             return (
               <div key={item.title}>
+                {/* Group header is NOT a Link: it only toggles children visibility. */}
                 <button
+                  type="button"
                   onClick={() => toggleGroup(item.title)}
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
@@ -189,17 +211,16 @@ export function Sidebar() {
                       ? 'bg-slate-800 text-white'
                       : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   )}
+                  aria-expanded={isExpanded}
+                  aria-controls={`sidebar-group-${item.title}`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span className="text-sm font-medium flex-1 text-left">{item.title}</span>
-                  {isExpanded ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
+                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </button>
+
                 {isExpanded && (
-                  <div className="ml-8 mt-1 space-y-1">
+                  <div id={`sidebar-group-${item.title}`} className="ml-8 mt-1 space-y-1">
                     {item.children.map((child) => (
                       <Link
                         key={child.path}
@@ -227,9 +248,7 @@ export function Sidebar() {
               to={item.path!}
               className={cn(
                 'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                location.pathname === item.path
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                location.pathname === item.path ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               )}
             >
               <item.icon className="w-5 h-5" />
@@ -237,13 +256,12 @@ export function Sidebar() {
             </Link>
           )
         })}
+
         <Link
           to="/ayarlar"
           className={cn(
             'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors mt-4',
-            location.pathname === '/ayarlar'
-              ? 'bg-slate-800 text-white'
-              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            location.pathname === '/ayarlar' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
           )}
         >
           <Settings className="w-5 h-5" />
