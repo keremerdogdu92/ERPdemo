@@ -56,7 +56,10 @@ export function RoleModeToggle({ role, onRoleChange }: RoleModeToggleProps) {
         <div
           className={cn(
             'absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] rounded-full',
-            'bg-slate-900/70 shadow-md ring-1 ring-white/10',
+            // Active background: subtle primary-tinted gradient for a premium corporate feel.
+            'bg-gradient-to-b from-primary/35 to-primary/15',
+            // Separation + polish: thin tinted ring + soft shadow
+            'ring-1 ring-primary/35 shadow-[0_6px_18px_rgba(0,0,0,0.35)]',
             'transition-transform duration-200 ease-in-out'
           )}
           style={{
