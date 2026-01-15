@@ -4,10 +4,10 @@
 // - Persists expanded/collapsed state to localStorage.
 // - Shows additional "Mali Müşavir" menus when role is 'mali-musavir'.
 // - Pins the RoleModeToggle to the bottom of the sidebar so it doesn't move as menus grow.
-// - Replaces the text brand with a logo served from /public.
 // Integrations:
 // - storage.getRole / storage.setRole uses localStorage key 'qnowa_role'.
 // - RoleModeToggle renders an iOS-style role switch (single track + sliding knob).
+// - Brand logo is served from Vite public path: /brand/qnowa-logo.png
 // Notes:
 // - Routes are not protected; role controls only menu visibility (demo behavior).
 
@@ -40,9 +40,6 @@ interface MenuItem {
 }
 
 const STORAGE_KEY_EXPANDED = 'qnowa_sidebar_expanded'
-
-// Public asset path (served from /public). Keep lowercase folders for Linux/Vercel compatibility.
-const BRAND_LOGO_SRC = '/brand/qnowa-logo.png'
 
 function getExpandedState(): Record<string, boolean> {
   try {
@@ -192,15 +189,16 @@ export function Sidebar() {
     // Use a column flex layout so the bottom switch is pinned and does not move as menu content grows.
     <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col">
       <div className="mb-6 shrink-0">
-        {/* Brand logo (served from /public/brand/qnowa-logo.png). */}
-        <div className="select-none">
+        {/* Brand logo (served from /public). Keep it clickable to go Dashboard. */}
+        <Link to="/" className="inline-flex items-center">
           <img
-            src={BRAND_LOGO_SRC}
+            src="/brand/qnowa-logo.png"
             alt="Qnowa"
-            className="h-10 w-auto"
+            className="h-12 w-auto"
+            loading="eager"
             draggable={false}
           />
-        </div>
+        </Link>
 
         <p className="text-sm text-slate-400 mt-2">E-Fatura & Muhasebe</p>
       </div>
