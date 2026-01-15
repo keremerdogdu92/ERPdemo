@@ -6,7 +6,7 @@
 // Integrations:
 // - storage.getCompany/getInvoices/getIncomingInvoices/getZReports/getExpenses/getVouchers
 // - storage.getDefterBeyanJobs/setDefterBeyanJobs
-// - UI: Card, Table, Badge, Button, Select, Input
+// - UI: Card, Table, Badge, Button
 
 import { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +16,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatCurrency, formatDateTime } from '@/lib/utils'
 import { storage } from '@/lib/storage'
 import type { DefterBeyanJob } from '@/types'
+
+type SourceOption = {
+  value: string
+  label: string
+}
 
 const statusColors: Record<DefterBeyanJob['status'], string> = {
   pending: 'bg-yellow-500',
@@ -55,7 +60,11 @@ function getSourceLabel(type: string) {
   return labels[type] || type
 }
 
-function ensureNoDuplicateJob(jobs: DefterBeyanJob[], sourceType: DefterBeyanJob['sourceType'], sourceId: string) {
+function ensureNoDuplicateJob(
+  jobs: DefterBeyanJob[],
+  sourceType: DefterBeyanJob['sourceType'],
+  sourceId: string
+) {
   return jobs.some((j) => j.sourceType === sourceType && j.sourceId === sourceId)
 }
 
@@ -78,7 +87,11 @@ export function DefterBeyan() {
   const invoices = storage.getInvoices()
   const incomingInvoices = storage.getIncomingInvoices()
   const zReports = storage.getZReports()
-  const expenses = (storage as any).getExpenses ? (storage as any).getExpenses() : []
+
+  // Demo-hardening: storage may not expose getExpenses in some builds.
+  // Keep runtime behavior but avoid type instability in the rest of the file.
+  const expenses = (storage as unknown as { getExpenses?: () => any[] }).getExpenses?.() ?? []
+
   const vouchers = storage.getVouchers()
 
   // OKC vouchers are stored as vouchers with sourceType === 'okc-fisi' (per our demo setup).
@@ -167,10 +180,7 @@ export function DefterBeyan() {
           ...j,
           status: success ? ('success' as const) : ('error' as const),
           lastRunAt: new Date().toISOString(),
-          logs: [
-            ...j.logs,
-            `[${nowTrTime()}] ${success ? 'Başarılı' : 'Hata oluştu (simülasyon)'}`,
-          ],
+          logs: [...j.logs, `[${nowTrTime()}] ${success ? 'Başarılı' : 'Hata oluştu (simülasyon)'}`],
         }
       })
 
@@ -207,7 +217,7 @@ export function DefterBeyan() {
     updateJobs(updated)
   }
 
-  const sourceOptions = useMemo(() => {
+  const sourceOptions = useMemo<SourceOption[]>(() => {
     // Build dropdown options based on sourceType.
     if (newSourceType === 'satis') {
       return invoices.map((inv) => ({
@@ -215,12 +225,14 @@ export function DefterBeyan() {
         label: `${inv.invoiceNumber} - ${inv.customerName} (${formatCurrency(inv.total)})`,
       }))
     }
+
     if (newSourceType === 'alis') {
       return incomingInvoices.map((inv) => ({
         value: inv.id,
         label: `${inv.invoiceNumber} - ${inv.supplierName} (${formatCurrency(inv.total)})`,
       }))
     }
+
     if (newSourceType === 'z-raporu') {
       return zReports.map((r) => ({
         value: r.id,
@@ -229,18 +241,21 @@ export function DefterBeyan() {
         )} / Kart ${formatCurrency(r.cardTotal)})`,
       }))
     }
+
     if (newSourceType === 'okc') {
       return okcVouchers.map((v) => ({
         value: v.id,
         label: `${v.voucherNumber} - ${v.date}`,
       }))
     }
+
     if (newSourceType === 'gider') {
       return (expenses || []).map((e: any) => ({
-        value: e.id,
+        value: String(e.id),
         label: `${e.description} - ${formatCurrency(e.total ?? e.amount ?? 0)} (${e.date})`,
       }))
     }
+
     return []
   }, [newSourceType, invoices, incomingInvoices, zReports, okcVouchers, expenses])
 
@@ -283,7 +298,7 @@ export function DefterBeyan() {
                 onChange={(e) => setNewSourceId(e.target.value)}
               >
                 <option value="">Seçiniz</option>
-                {sourceOptions.map((opt) => (
+                {sourceOptions.map((opt: SourceOption) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -355,9 +370,7 @@ export function DefterBeyan() {
             </Table>
           </div>
 
-          {jobs.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">Henüz iş yok.</div>
-          )}
+          {jobs.length === 0 && <div className="text-center py-8 text-muted-foreground">Henüz iş yok.</div>}
         </CardContent>
       </Card>
 
