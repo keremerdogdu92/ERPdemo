@@ -188,8 +188,13 @@ export function Sidebar() {
     // Use a column flex layout so the bottom switch is pinned and does not move as menu content grows.
     <div className="w-64 bg-slate-900 text-white min-h-screen p-4 flex flex-col">
       <div className="mb-6 shrink-0">
-        <h1 className="text-2xl font-bold">Qnowa</h1>
-        <p className="text-sm text-slate-400">E-Fatura & Muhasebe</p>
+        {/* Brand mark: "Q" stacked above "nowa" and centered within the brand block. */}
+        <div className="inline-flex flex-col items-center leading-none select-none">
+          <div className="text-3xl font-extrabold tracking-tight">Q</div>
+          <div className="-mt-0.5 text-sm font-semibold tracking-[0.28em]">nowa</div>
+        </div>
+
+        <p className="text-sm text-slate-400 mt-2">E-Fatura & Muhasebe</p>
       </div>
 
       {/* Navigation becomes scrollable when content is long, keeping bottom switch fixed. */}
@@ -209,9 +214,7 @@ export function Sidebar() {
                   onClick={() => toggleGroup(item.title)}
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                    hasActiveChild
-                      ? 'bg-slate-800 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    hasActiveChild ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   )}
                   aria-expanded={isExpanded}
                   aria-controls={`sidebar-group-${item.title}`}
@@ -250,9 +253,7 @@ export function Sidebar() {
               to={item.path!}
               className={cn(
                 'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                location.pathname === item.path
-                  ? 'bg-slate-800 text-white'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                location.pathname === item.path ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               )}
             >
               <item.icon className="w-5 h-5" />
@@ -265,9 +266,7 @@ export function Sidebar() {
           to="/ayarlar"
           className={cn(
             'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors mt-4',
-            location.pathname === '/ayarlar'
-              ? 'bg-slate-800 text-white'
-              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            location.pathname === '/ayarlar' ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
           )}
         >
           <Settings className="w-5 h-5" />
