@@ -1,4 +1,15 @@
-import { useState } from 'react'
+// src/pages/fatura/NewInvoice.tsx
+// Summary: Creates a new sales invoice and persists it to localStorage via storage.ts.
+// - Captures invoice header (customer, dates) and line items.
+// - Computes subtotal/VAT/total.
+// - Persists invoice with an initial audit event ("Taslak").
+// - Optionally updates stock levels and creates stock movements when stockItemId is provided.
+// Integrations:
+// - storage.getCompany/getCustomers/getStockItems/getInvoices/getStockMovements
+// - storage.setInvoices/setStockItems/setStockMovements
+// - Navigates to invoice detail after save.
+
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,53 +22,92 @@ import { storage } from '@/lib/storage'
 import type { Invoice, InvoiceLineItem } from '@/types'
 import { Plus, Trash2 } from 'lucide-react'
 
+function safeId(prefix: string) {
+  // Prefer cryptographically strong UUID when available (modern browsers).
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+  // Fallback for older environments.
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function todayISO(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
 export function NewInvoice() {
   const navigate = useNavigate()
-  const company = storage.getCompany()!
+  const company = storage.getCompany()
+
+  // In demo mode, we assume company setup exists. Still guard to avoid hard crash.
+  if (!company) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">Yeni Fatura Oluştur</h1>
+        <p className="text-slate-600">Şirket bilgisi bulunamadı. Lütfen önce firma kurulumunu tamamlayın.</p>
+        <Button onClick={() => navigate('/ayarlar')}>Ayarlar'a Git</Button>
+      </div>
+    )
+  }
+
   const customers = storage.getCustomers()
   const stockItems = storage.getStockItems()
 
   const [customerId, setCustomerId] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
-  const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(todayISO())
+  const [dueDate, setDueDate] = useState(todayISO())
   const [items, setItems] = useState<InvoiceLineItem[]>([])
 
   const addItem = () => {
     const newItem: InvoiceLineItem = {
-      id: `item-${Date.now()}`,
+      id: safeId('item'),
       description: '',
       quantity: 1,
       unitPrice: 0,
       vatRate: 18,
       total: 0,
     }
-    setItems([...items, newItem])
+    setItems((prev) => [...prev, newItem])
   }
 
   const updateItem = (id: string, field: keyof InvoiceLineItem, value: any) => {
-    setItems(
-      items.map((item) => {
-        if (item.id === id) {
-          const updated = { ...item, [field]: value }
-          if (field === 'quantity' || field === 'unitPrice' || field === 'vatRate') {
-            const subtotal = updated.quantity * updated.unitPrice
-            updated.total = subtotal * (1 + updated.vatRate / 100)
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+
+        const updated: InvoiceLineItem = { ...item, [field]: value }
+
+        // If a stock item was selected, optionally auto-fill description/unit price if empty.
+        if (field === 'stockItemId') {
+          const s = stockItems.find((x) => x.id === value)
+          if (s) {
+            if (!updated.description) updated.description = s.name
+            if (!updated.unitPrice || updated.unitPrice === 0) updated.unitPrice = s.unitPrice
           }
-          return updated
         }
-        return item
+
+        // Recompute total when numeric inputs change.
+        if (field === 'quantity' || field === 'unitPrice' || field === 'vatRate') {
+          const qty = Number(updated.quantity) || 0
+          const price = Number(updated.unitPrice) || 0
+          const vr = Number(updated.vatRate) || 0
+          const subtotalLine = qty * price
+          updated.total = subtotalLine * (1 + vr / 100)
+        }
+
+        return updated
       })
     )
   }
 
   const removeItem = (id: string) => {
-    setItems(items.filter((item) => item.id !== id))
+    setItems((prev) => prev.filter((item) => item.id !== id))
   }
 
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
-  const vat = items.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100),
-    0
+  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), [items])
+  const vat = useMemo(
+    () => items.reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100), 0),
+    [items]
   )
   const total = subtotal + vat
 
@@ -68,14 +118,26 @@ export function NewInvoice() {
     }
 
     const customer = customers.find((c) => c.id === customerId)
-    if (!customer) return
+    if (!customer) {
+      alert('Seçilen müşteri bulunamadı.')
+      return
+    }
 
-    const invoiceNumber = `FAT-${new Date().getFullYear()}-${String(
-      storage.getInvoices().length + 1
-    ).padStart(3, '0')}`
+    // Basic line validation for demo realism.
+    const hasInvalidLine = items.some((i) => !i.description || i.quantity <= 0 || i.unitPrice < 0)
+    if (hasInvalidLine) {
+      alert('Lütfen kalem açıklaması girin; miktar 0’dan büyük olmalı ve fiyat negatif olmamalı.')
+      return
+    }
+
+    const invoices = storage.getInvoices()
+    const invoiceNumber = `FAT-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, '0')}`
+
+    const invoiceId = safeId('inv')
+    const nowIso = new Date().toISOString()
 
     const invoice: Invoice = {
-      id: `inv-${Date.now()}`,
+      id: invoiceId,
       companyId: company.id,
       invoiceNumber,
       customerId: customer.id,
@@ -90,45 +152,55 @@ export function NewInvoice() {
       items,
       events: [
         {
-          id: `evt-${Date.now()}`,
-          timestamp: new Date().toISOString(),
+          id: safeId('evt'),
+          timestamp: nowIso,
           status: 'Taslak',
         },
       ],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
     }
 
-    const invoices = storage.getInvoices()
     storage.setInvoices([...invoices, invoice])
 
-    // Update stock and create movements if applicable
-    const movements = storage.getStockMovements()
-    items.forEach((item) => {
-      if (item.stockItemId) {
-        const stockItem = stockItems.find((s) => s.id === item.stockItemId)
-        if (stockItem) {
-          stockItem.stock -= item.quantity
-          storage.setStockItems([...stockItems])
-          
-          // Create stock movement
-          movements.push({
-            id: `mov-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            companyId: company.id,
-            stockItemId: item.stockItemId,
-            type: 'out',
-            quantity: item.quantity,
-            referenceType: 'invoice',
-            referenceId: invoice.id,
-            date: date,
-            createdAt: new Date().toISOString(),
-          })
-        }
+    // Stock update + movement creation (demo-safe):
+    // - Update stock items in memory first
+    // - Validate stock does not go negative
+    // - Then persist stock + movements once
+    const originalStockItems = storage.getStockItems()
+    const updatedStockItems = originalStockItems.map((s) => ({ ...s }))
+    const movements = storage.getStockMovements().slice()
+
+    for (const line of items) {
+      if (!line.stockItemId) continue
+
+      const stock = updatedStockItems.find((s) => s.id === line.stockItemId)
+      if (!stock) continue
+
+      const nextStock = stock.stock - line.quantity
+      if (nextStock < 0) {
+        alert(`Stok yetersiz: "${stock.name}" için mevcut stok ${stock.stock}, çıkış ${line.quantity}.`)
+        return
       }
-    })
-    if (movements.length > 0) {
-      storage.setStockMovements(movements)
+
+      stock.stock = nextStock
+
+      movements.push({
+        id: safeId('mov'),
+        companyId: company.id,
+        stockItemId: line.stockItemId,
+        type: 'out',
+        quantity: line.quantity,
+        referenceType: 'invoice',
+        referenceId: invoiceId,
+        date,
+        createdAt: nowIso,
+      })
     }
+
+    // Persist stock/movements if we changed anything.
+    storage.setStockItems(updatedStockItems)
+    storage.setStockMovements(movements)
 
     navigate(`/fatura/${invoice.id}`)
   }
@@ -158,21 +230,11 @@ export function NewInvoice() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="date">Fatura Tarihi</Label>
-              <Input
-                id="date"
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-              />
+              <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="dueDate">Vade Tarihi</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-              />
+              <Input id="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
           </div>
         </CardContent>
@@ -193,6 +255,7 @@ export function NewInvoice() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Stok/Hizmet</TableHead>
                   <TableHead>Açıklama</TableHead>
                   <TableHead>Miktar</TableHead>
                   <TableHead>Birim Fiyat</TableHead>
@@ -204,13 +267,28 @@ export function NewInvoice() {
               <TableBody>
                 {items.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell>
+                    <TableCell className="min-w-[220px]">
+                      <Select
+                        value={item.stockItemId ?? ''}
+                        onChange={(e) => updateItem(item.id, 'stockItemId', e.target.value || undefined)}
+                      >
+                        <option value="">(Opsiyonel) Stok seç...</option>
+                        {stockItems.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.code} - {s.name} (Stok: {s.stock})
+                          </option>
+                        ))}
+                      </Select>
+                    </TableCell>
+
+                    <TableCell className="min-w-[220px]">
                       <Input
                         value={item.description}
                         onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                         placeholder="Açıklama"
                       />
                     </TableCell>
+
                     <TableCell>
                       <Input
                         type="number"
@@ -219,35 +297,35 @@ export function NewInvoice() {
                         className="w-20"
                       />
                     </TableCell>
+
                     <TableCell>
                       <Input
                         type="number"
                         value={item.unitPrice}
-                        onChange={(e) =>
-                          updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)
-                        }
+                        onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                         className="w-32"
                       />
                     </TableCell>
+
                     <TableCell>
                       <Select
-                        value={item.vatRate}
+                        value={String(item.vatRate)}
                         onChange={(e) => updateItem(item.id, 'vatRate', parseFloat(e.target.value))}
                         className="w-24"
                       >
                         <option value="0">0%</option>
                         <option value="1">1%</option>
+                        <option value="8">8%</option>
                         <option value="10">10%</option>
+                        <option value="18">18%</option>
                         <option value="20">20%</option>
                       </Select>
                     </TableCell>
+
                     <TableCell>{formatCurrency(item.total)}</TableCell>
+
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(item.id)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </TableCell>
@@ -258,9 +336,7 @@ export function NewInvoice() {
           </div>
 
           {items.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              Henüz kalem eklenmedi. Lütfen kalem ekleyin.
-            </div>
+            <div className="text-center py-8 text-muted-foreground">Henüz kalem eklenmedi. Lütfen kalem ekleyin.</div>
           )}
 
           {items.length > 0 && (

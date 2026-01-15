@@ -1,4 +1,12 @@
-import { useState } from 'react'
+// src/pages/fatura/SalesInvoices.tsx
+// Summary: Lists sales invoices from localStorage and supports searching/filtering.
+// Integrations:
+// - storage.getInvoices()
+// - Navigates to create page and invoice detail pages.
+// Notes:
+// - Fixes status filter value for "GİB'e İletildi" to match the InvoiceStatus union type.
+
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +22,7 @@ const statusColors: Record<InvoiceStatus, string> = {
   Taslak: 'bg-gray-500',
   Gönderildi: 'bg-blue-500',
   Onaylandı: 'bg-yellow-500',
-  'GİB\'e İletildi': 'bg-purple-500',
+  "GİB'e İletildi": 'bg-purple-500',
   'PDF Oluşturuldu': 'bg-green-500',
   İptal: 'bg-red-500',
   İade: 'bg-orange-500',
@@ -26,13 +34,15 @@ export function SalesInvoices() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all')
 
-  const filteredInvoices = invoices.filter((inv) => {
-    const matchesSearch =
-      inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.customerName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || inv.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      const matchesSearch =
+        inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        inv.customerName.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesStatus = statusFilter === 'all' || inv.status === statusFilter
+      return matchesSearch && matchesStatus
+    })
+  }, [invoices, searchTerm, statusFilter])
 
   return (
     <div className="space-y-6">
@@ -103,17 +113,11 @@ export function SalesInvoices() {
                     <TableCell>{formatDate(invoice.date)}</TableCell>
                     <TableCell>{formatDate(invoice.dueDate)}</TableCell>
                     <TableCell>
-                      <Badge className={statusColors[invoice.status]}>
-                        {invoice.status}
-                      </Badge>
+                      <Badge className={statusColors[invoice.status]}>{invoice.status}</Badge>
                     </TableCell>
                     <TableCell>{formatCurrency(invoice.total)}</TableCell>
                     <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/fatura/${invoice.id}`)}
-                      >
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/fatura/${invoice.id}`)}>
                         Detay
                       </Button>
                     </TableCell>
@@ -122,10 +126,9 @@ export function SalesInvoices() {
               </TableBody>
             </Table>
           </div>
+
           {filteredInvoices.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              Fatura bulunamadı.
-            </div>
+            <div className="text-center py-8 text-muted-foreground">Fatura bulunamadı.</div>
           )}
         </CardContent>
       </Card>

@@ -1,61 +1,86 @@
-import { useParams, useNavigate } from 'react-router-dom'
+// src/pages/fatura/InvoiceDetail.tsx
+// Summary: Displays a single invoice, supports a demo status state machine and audit trail.
+// - Reads invoice from localStorage (storage.getInvoices()).
+// - Updates invoice status and appends an audit event.
+// - Persists updates back to localStorage and updates local component state so UI refreshes immediately.
+// Integrations:
+// - storage.getInvoices/setInvoices
+// - Uses formatCurrency/formatDate/formatDateTime helpers.
+
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { formatCurrency, formatDateTime } from '@/lib/utils'
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils'
 import { storage } from '@/lib/storage'
-import type { InvoiceStatus } from '@/types'
+import type { Invoice, InvoiceStatus } from '@/types'
 import { ArrowLeft } from 'lucide-react'
 
-const statusFlow: InvoiceStatus[] = [
-  'Taslak',
-  'Gönderildi',
-  'Onaylandı',
-  'GİB\'e İletildi',
-  'PDF Oluşturuldu',
-]
+const statusFlow: InvoiceStatus[] = ['Taslak', 'Gönderildi', 'Onaylandı', "GİB'e İletildi", 'PDF Oluşturuldu']
+
+function safeId(prefix: string) {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const invoices = storage.getInvoices()
-  const invoice = invoices.find((inv) => inv.id === id)
+
+  const [invoice, setInvoice] = useState<Invoice | null>(null)
+
+  // Load invoice on mount / id change.
+  useEffect(() => {
+    const invoices = storage.getInvoices()
+    const found = invoices.find((inv) => inv.id === id) ?? null
+    setInvoice(found)
+  }, [id])
+
+  const getNextStatus = useMemo((): InvoiceStatus | null => {
+    if (!invoice) return null
+    const currentIndex = statusFlow.indexOf(invoice.status)
+    if (currentIndex === -1 || currentIndex === statusFlow.length - 1) return null
+    return statusFlow[currentIndex + 1]
+  }, [invoice])
 
   if (!invoice) {
     return (
-      <div>
+      <div className="space-y-4">
         <p>Fatura bulunamadı.</p>
         <Button onClick={() => navigate('/fatura/satis')}>Geri Dön</Button>
       </div>
     )
   }
 
+  const persistInvoice = (updated: Invoice) => {
+    // Persist to localStorage and update local state so the UI reflects changes immediately.
+    const invoices = storage.getInvoices()
+    const next = invoices.map((inv) => (inv.id === updated.id ? updated : inv))
+    storage.setInvoices(next)
+    setInvoice(updated)
+  }
+
   const handleStatusChange = (newStatus: InvoiceStatus) => {
-    const updatedInvoice = {
+    const nowIso = new Date().toISOString()
+    const updatedInvoice: Invoice = {
       ...invoice,
       status: newStatus,
       events: [
         ...invoice.events,
         {
-          id: `evt-${Date.now()}`,
-          timestamp: new Date().toISOString(),
+          id: safeId('evt'),
+          timestamp: nowIso,
           status: newStatus,
         },
       ],
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     }
 
-    const updatedInvoices = invoices.map((inv) =>
-      inv.id === invoice.id ? updatedInvoice : inv
-    )
-    storage.setInvoices(updatedInvoices)
-  }
-
-  const getNextStatus = (): InvoiceStatus | null => {
-    const currentIndex = statusFlow.indexOf(invoice.status)
-    if (currentIndex === -1 || currentIndex === statusFlow.length - 1) return null
-    return statusFlow[currentIndex + 1]
+    persistInvoice(updatedInvoice)
   }
 
   const canCancel = invoice.status !== 'İptal' && invoice.status !== 'İade'
@@ -87,11 +112,11 @@ export function InvoiceDetail() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Fatura Tarihi</p>
-              <p className="font-medium">{formatDateTime(invoice.date)}</p>
+              <p className="font-medium">{formatDate(invoice.date)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Vade Tarihi</p>
-              <p className="font-medium">{formatDateTime(invoice.dueDate)}</p>
+              <p className="font-medium">{formatDate(invoice.dueDate)}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Durum</p>
@@ -157,27 +182,21 @@ export function InvoiceDetail() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
-            {getNextStatus() && (
-              <Button onClick={() => handleStatusChange(getNextStatus()!)}>
-                {getNextStatus() === 'Gönderildi' && 'Gönder'}
-                {getNextStatus() === 'Onaylandı' && 'Onayla'}
-                {getNextStatus() === 'GİB\'e İletildi' && 'GİB\'e İlet'}
-                {getNextStatus() === 'PDF Oluşturuldu' && 'PDF Oluştur'}
+            {getNextStatus && (
+              <Button onClick={() => handleStatusChange(getNextStatus)}>
+                {getNextStatus === 'Gönderildi' && 'Gönder'}
+                {getNextStatus === 'Onaylandı' && 'Onayla'}
+                {getNextStatus === "GİB'e İletildi" && "GİB'e İlet"}
+                {getNextStatus === 'PDF Oluşturuldu' && 'PDF Oluştur'}
               </Button>
             )}
             {canCancel && (
-              <Button
-                variant="destructive"
-                onClick={() => handleStatusChange('İptal')}
-              >
+              <Button variant="destructive" onClick={() => handleStatusChange('İptal')}>
                 İptal Et
               </Button>
             )}
             {canReturn && (
-              <Button
-                variant="outline"
-                onClick={() => handleStatusChange('İade')}
-              >
+              <Button variant="outline" onClick={() => handleStatusChange('İade')}>
                 İade Oluştur
               </Button>
             )}
@@ -191,16 +210,12 @@ export function InvoiceDetail() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {invoice.events.map((event) => (
+            {[...invoice.events].reverse().map((event) => (
               <div key={event.id} className="flex items-center gap-4 border-l-2 pl-4">
                 <div className="flex-1">
                   <p className="font-medium">{event.status}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatDateTime(event.timestamp)}
-                  </p>
-                  {event.note && (
-                    <p className="text-sm text-muted-foreground mt-1">{event.note}</p>
-                  )}
+                  <p className="text-sm text-muted-foreground">{formatDateTime(event.timestamp)}</p>
+                  {event.note && <p className="text-sm text-muted-foreground mt-1">{event.note}</p>}
                 </div>
               </div>
             ))}
