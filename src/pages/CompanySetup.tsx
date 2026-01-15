@@ -164,7 +164,7 @@ export function CompanySetup() {
                 maxLength={taxIdSpec.requiredLength}
                 required
               />
-              <p className="text-xs text-muted-foreground">{taxIdSpec.requiredLength} hane, yalnızca rakam.</p>
+              {/* Intentionally hidden helper text (per UX request). Validation remains active. */}
             </div>
 
             <div className="space-y-2">
