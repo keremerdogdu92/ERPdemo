@@ -1,3 +1,8 @@
+// src/types/index.ts
+// Summary: Shared type definitions for the ERP demo.
+// Notes:
+// - Extended StockMovement.referenceType to include 'incoming-invoice' while keeping 'purchase' for backward compatibility.
+
 export type CompanyMode = 'isletme-defteri' | 'genel-muhasebe'
 export type UserRole = 'mukellef' | 'mali-musavir'
 
@@ -10,7 +15,14 @@ export interface Company {
   createdAt: string
 }
 
-export type InvoiceStatus = 'Taslak' | 'Gönderildi' | 'Onaylandı' | 'GİB\'e İletildi' | 'PDF Oluşturuldu' | 'İptal' | 'İade'
+export type InvoiceStatus =
+  | 'Taslak'
+  | 'Gönderildi'
+  | 'Onaylandı'
+  | "GİB'e İletildi"
+  | 'PDF Oluşturuldu'
+  | 'İptal'
+  | 'İade'
 
 export interface InvoiceEvent {
   id: string
@@ -117,7 +129,7 @@ export interface StockMovement {
   stockItemId: string
   type: 'in' | 'out'
   quantity: number
-  referenceType: 'invoice' | 'purchase' | 'manual'
+  referenceType: 'invoice' | 'purchase' | 'incoming-invoice' | 'manual'
   referenceId: string
   date: string
   createdAt: string

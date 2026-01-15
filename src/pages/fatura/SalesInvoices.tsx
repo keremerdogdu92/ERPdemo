@@ -1,10 +1,10 @@
 // src/pages/fatura/SalesInvoices.tsx
 // Summary: Lists sales invoices from localStorage and supports searching/filtering.
 // Integrations:
-// - storage.getInvoices()
+// - storage.getCompany/getInvoices()
 // - Navigates to create page and invoice detail pages.
 // Notes:
-// - Fixes status filter value for "GİB'e İletildi" to match the InvoiceStatus union type.
+// - Company-scoped listing to avoid cross-company mixing in demo expansions.
 
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -30,7 +30,14 @@ const statusColors: Record<InvoiceStatus, string> = {
 
 export function SalesInvoices() {
   const navigate = useNavigate()
-  const invoices = storage.getInvoices()
+  const company = storage.getCompany()
+  const invoicesAll = storage.getInvoices()
+
+  const invoices = useMemo(() => {
+    if (!company) return []
+    return invoicesAll.filter((inv) => inv.companyId === company.id)
+  }, [company, invoicesAll])
+
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all')
 
@@ -78,7 +85,7 @@ export function SalesInvoices() {
               <option value="Taslak">Taslak</option>
               <option value="Gönderildi">Gönderildi</option>
               <option value="Onaylandı">Onaylandı</option>
-              <option value="GİB'e İletildi">GİB'e İletildi</option>
+              <option value="GİB'e İletildi">GİB&apos;e İletildi</option>
               <option value="PDF Oluşturuldu">PDF Oluşturuldu</option>
               <option value="İptal">İptal</option>
               <option value="İade">İade</option>

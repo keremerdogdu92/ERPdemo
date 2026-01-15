@@ -3,11 +3,15 @@
 // - Captures invoice header (customer, dates) and line items.
 // - Computes subtotal/VAT/total.
 // - Persists invoice with an initial audit event ("Taslak").
-// - Optionally updates stock levels and creates stock movements when stockItemId is provided.
+// - Updates stock levels and creates stock movements when stockItemId is provided.
 // Integrations:
 // - storage.getCompany/getCustomers/getStockItems/getInvoices/getStockMovements
 // - storage.setInvoices/setStockItems/setStockMovements
 // - Navigates to invoice detail after save.
+//
+// Notes (Demo correctness / consistency):
+// - Transactional behavior: if stock is insufficient, invoice is NOT saved.
+// - Recomputes line totals whenever relevant fields change (including stock item auto-fill).
 
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -35,6 +39,24 @@ function todayISO(): string {
   return new Date().toISOString().split('T')[0]
 }
 
+function computeLineTotal(quantity: number, unitPrice: number, vatRate: number): number {
+  const qty = Number(quantity) || 0
+  const price = Number(unitPrice) || 0
+  const vr = Number(vatRate) || 0
+  const subtotalLine = qty * price
+  return subtotalLine * (1 + vr / 100)
+}
+
+function normalizeItems(items: InvoiceLineItem[]): InvoiceLineItem[] {
+  return items.map((i) => ({
+    ...i,
+    quantity: Number(i.quantity) || 0,
+    unitPrice: Number(i.unitPrice) || 0,
+    vatRate: Number(i.vatRate) || 0,
+    total: computeLineTotal(i.quantity, i.unitPrice, i.vatRate),
+  }))
+}
+
 export function NewInvoice() {
   const navigate = useNavigate()
   const company = storage.getCompany()
@@ -45,13 +67,17 @@ export function NewInvoice() {
       <div className="space-y-4">
         <h1 className="text-3xl font-bold">Yeni Fatura Oluştur</h1>
         <p className="text-slate-600">Şirket bilgisi bulunamadı. Lütfen önce firma kurulumunu tamamlayın.</p>
-        <Button onClick={() => navigate('/ayarlar')}>Ayarlar'a Git</Button>
+        <Button onClick={() => navigate('/ayarlar')}>Ayarlar&apos;a Git</Button>
       </div>
     )
   }
 
-  const customers = storage.getCustomers()
-  const stockItems = storage.getStockItems()
+  const customersAll = storage.getCustomers()
+  const stockItemsAll = storage.getStockItems()
+
+  // Company scoping for safety if the demo grows to multi-company.
+  const customers = customersAll.filter((c) => c.companyId === company.id)
+  const stockItems = stockItemsAll.filter((s) => s.companyId === company.id)
 
   const [customerId, setCustomerId] = useState('')
   const [date, setDate] = useState(todayISO())
@@ -65,7 +91,7 @@ export function NewInvoice() {
       quantity: 1,
       unitPrice: 0,
       vatRate: 18,
-      total: 0,
+      total: computeLineTotal(1, 0, 18),
     }
     setItems((prev) => [...prev, newItem])
   }
@@ -77,7 +103,7 @@ export function NewInvoice() {
 
         const updated: InvoiceLineItem = { ...item, [field]: value }
 
-        // If a stock item was selected, optionally auto-fill description/unit price if empty.
+        // If a stock item was selected, optionally auto-fill description/unit price if empty/zero.
         if (field === 'stockItemId') {
           const s = stockItems.find((x) => x.id === value)
           if (s) {
@@ -86,14 +112,9 @@ export function NewInvoice() {
           }
         }
 
-        // Recompute total when numeric inputs change.
-        if (field === 'quantity' || field === 'unitPrice' || field === 'vatRate') {
-          const qty = Number(updated.quantity) || 0
-          const price = Number(updated.unitPrice) || 0
-          const vr = Number(updated.vatRate) || 0
-          const subtotalLine = qty * price
-          updated.total = subtotalLine * (1 + vr / 100)
-        }
+        // Always recompute total after any update that could influence it.
+        // This avoids edge cases where stock selection auto-fills unitPrice but total stays stale.
+        updated.total = computeLineTotal(updated.quantity, updated.unitPrice, updated.vatRate)
 
         return updated
       })
@@ -104,15 +125,20 @@ export function NewInvoice() {
     setItems((prev) => prev.filter((item) => item.id !== id))
   }
 
-  const subtotal = useMemo(() => items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), [items])
+  const normalizedItems = useMemo(() => normalizeItems(items), [items])
+
+  const subtotal = useMemo(
+    () => normalizedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
+    [normalizedItems]
+  )
   const vat = useMemo(
-    () => items.reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100), 0),
-    [items]
+    () => normalizedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice * (item.vatRate / 100), 0),
+    [normalizedItems]
   )
   const total = subtotal + vat
 
   const handleSubmit = () => {
-    if (!customerId || items.length === 0) {
+    if (!customerId || normalizedItems.length === 0) {
       alert('Lütfen müşteri seçin ve en az bir kalem ekleyin.')
       return
     }
@@ -124,57 +150,28 @@ export function NewInvoice() {
     }
 
     // Basic line validation for demo realism.
-    const hasInvalidLine = items.some((i) => !i.description || i.quantity <= 0 || i.unitPrice < 0)
+    const hasInvalidLine = normalizedItems.some((i) => !i.description || i.quantity <= 0 || i.unitPrice < 0)
     if (hasInvalidLine) {
       alert('Lütfen kalem açıklaması girin; miktar 0’dan büyük olmalı ve fiyat negatif olmamalı.')
       return
     }
 
-    const invoices = storage.getInvoices()
+    const invoicesAll = storage.getInvoices()
+    const invoices = invoicesAll.filter((inv) => inv.companyId === company.id)
     const invoiceNumber = `FAT-${new Date().getFullYear()}-${String(invoices.length + 1).padStart(3, '0')}`
 
     const invoiceId = safeId('inv')
     const nowIso = new Date().toISOString()
 
-    const invoice: Invoice = {
-      id: invoiceId,
-      companyId: company.id,
-      invoiceNumber,
-      customerId: customer.id,
-      customerName: customer.name,
-      customerTaxId: customer.taxId,
-      date,
-      dueDate,
-      status: 'Taslak',
-      subtotal,
-      vat,
-      total,
-      items,
-      events: [
-        {
-          id: safeId('evt'),
-          timestamp: nowIso,
-          status: 'Taslak',
-        },
-      ],
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    }
-
-    storage.setInvoices([...invoices, invoice])
-
-    // Stock update + movement creation (demo-safe):
-    // - Update stock items in memory first
-    // - Validate stock does not go negative
-    // - Then persist stock + movements once
-    const originalStockItems = storage.getStockItems()
-    const updatedStockItems = originalStockItems.map((s) => ({ ...s }))
+    // Prepare stock changes first (transactional).
+    const originalStockItemsAll = storage.getStockItems()
+    const updatedStockItemsAll = originalStockItemsAll.map((s) => ({ ...s }))
     const movements = storage.getStockMovements().slice()
 
-    for (const line of items) {
+    for (const line of normalizedItems) {
       if (!line.stockItemId) continue
 
-      const stock = updatedStockItems.find((s) => s.id === line.stockItemId)
+      const stock = updatedStockItemsAll.find((s) => s.id === line.stockItemId && s.companyId === company.id)
       if (!stock) continue
 
       const nextStock = stock.stock - line.quantity
@@ -198,8 +195,34 @@ export function NewInvoice() {
       })
     }
 
-    // Persist stock/movements if we changed anything.
-    storage.setStockItems(updatedStockItems)
+    // If we reached here, stock is valid. Now persist everything.
+    const invoice: Invoice = {
+      id: invoiceId,
+      companyId: company.id,
+      invoiceNumber,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerTaxId: customer.taxId,
+      date,
+      dueDate,
+      status: 'Taslak',
+      subtotal,
+      vat,
+      total,
+      items: normalizedItems,
+      events: [
+        {
+          id: safeId('evt'),
+          timestamp: nowIso,
+          status: 'Taslak',
+        },
+      ],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    }
+
+    storage.setInvoices([...invoicesAll, invoice])
+    storage.setStockItems(updatedStockItemsAll)
     storage.setStockMovements(movements)
 
     navigate(`/fatura/${invoice.id}`)
@@ -221,17 +244,19 @@ export function NewInvoice() {
               <Label htmlFor="customer">Müşteri</Label>
               <Select id="customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
                 <option value="">Seçiniz...</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
                   </option>
                 ))}
               </Select>
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="date">Fatura Tarihi</Label>
               <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="dueDate">Vade Tarihi</Label>
               <Input id="dueDate" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
@@ -250,6 +275,7 @@ export function NewInvoice() {
             </Button>
           </div>
         </CardHeader>
+
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
@@ -264,6 +290,7 @@ export function NewInvoice() {
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
                 {items.map((item) => (
                   <TableRow key={item.id}>
@@ -322,7 +349,7 @@ export function NewInvoice() {
                       </Select>
                     </TableCell>
 
-                    <TableCell>{formatCurrency(item.total)}</TableCell>
+                    <TableCell>{formatCurrency(computeLineTotal(item.quantity, item.unitPrice, item.vatRate))}</TableCell>
 
                     <TableCell>
                       <Button variant="ghost" size="icon" onClick={() => removeItem(item.id)}>
@@ -336,7 +363,9 @@ export function NewInvoice() {
           </div>
 
           {items.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">Henüz kalem eklenmedi. Lütfen kalem ekleyin.</div>
+            <div className="text-center py-8 text-muted-foreground">
+              Henüz kalem eklenmedi. Lütfen kalem ekleyin.
+            </div>
           )}
 
           {items.length > 0 && (

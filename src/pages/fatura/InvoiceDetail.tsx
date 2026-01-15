@@ -4,8 +4,11 @@
 // - Updates invoice status and appends an audit event.
 // - Persists updates back to localStorage and updates local component state so UI refreshes immediately.
 // Integrations:
-// - storage.getInvoices/setInvoices
+// - storage.getCompany/getInvoices/setInvoices
 // - Uses formatCurrency/formatDate/formatDateTime helpers.
+//
+// Notes:
+// - Company-scoped access: if invoice doesn't belong to active company, treat as not found.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -30,15 +33,22 @@ function safeId(prefix: string) {
 export function InvoiceDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const company = storage.getCompany()
 
   const [invoice, setInvoice] = useState<Invoice | null>(null)
 
-  // Load invoice on mount / id change.
   useEffect(() => {
     const invoices = storage.getInvoices()
     const found = invoices.find((inv) => inv.id === id) ?? null
+
+    // Company-scoped safety.
+    if (!company || (found && found.companyId !== company.id)) {
+      setInvoice(null)
+      return
+    }
+
     setInvoice(found)
-  }, [id])
+  }, [id, company])
 
   const getNextStatus = useMemo((): InvoiceStatus | null => {
     if (!invoice) return null
@@ -57,7 +67,6 @@ export function InvoiceDetail() {
   }
 
   const persistInvoice = (updated: Invoice) => {
-    // Persist to localStorage and update local state so the UI reflects changes immediately.
     const invoices = storage.getInvoices()
     const next = invoices.map((inv) => (inv.id === updated.id ? updated : inv))
     storage.setInvoices(next)

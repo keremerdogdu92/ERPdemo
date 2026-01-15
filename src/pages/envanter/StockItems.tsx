@@ -2,7 +2,7 @@
 // Summary: Stock item (inventory card) management for the demo.
 // - Lists stock items stored in localStorage via storage.ts.
 // - Allows creating a new stock card with basic validation.
-// - Uses React state for the list so UI updates immediately after save.
+// - Company-scoped display and duplicate checks.
 // Integrations:
 // - storage.getCompany/getStockItems/setStockItems
 // - formatCurrency helper for numeric display.
@@ -29,7 +29,6 @@ function safeId(prefix: string) {
 export function StockItems() {
   const company = storage.getCompany()
 
-  // Guard for demo safety; avoid hard crash if company is missing.
   if (!company) {
     return (
       <div className="space-y-4">
@@ -40,7 +39,9 @@ export function StockItems() {
   }
 
   const [isAdding, setIsAdding] = useState(false)
-  const [items, setItems] = useState<StockItem[]>(() => storage.getStockItems())
+
+  // Keep full dataset in state; derive company view from it.
+  const [allItems, setAllItems] = useState<StockItem[]>(() => storage.getStockItems())
 
   const [formData, setFormData] = useState({
     code: '',
@@ -50,11 +51,12 @@ export function StockItems() {
     unitPrice: 0,
   })
 
+  const companyItems = useMemo(() => allItems.filter((x) => x.companyId === company.id), [allItems, company.id])
+
   const handleSubmit = () => {
     const code = formData.code.trim()
     const name = formData.name.trim()
 
-    // Minimal validation for demo credibility.
     if (!code || !name) {
       alert('Lütfen stok kodu ve stok adı girin.')
       return
@@ -65,7 +67,7 @@ export function StockItems() {
     }
 
     // Prevent duplicate codes within the same company (demo-safe).
-    const exists = items.some((x) => x.companyId === company.id && x.code.trim().toLowerCase() === code.toLowerCase())
+    const exists = companyItems.some((x) => x.code.trim().toLowerCase() === code.toLowerCase())
     if (exists) {
       alert('Bu stok kodu zaten mevcut. Lütfen farklı bir kod girin.')
       return
@@ -84,18 +86,17 @@ export function StockItems() {
       createdAt: nowIso,
     }
 
-    const next = [...items, item]
-    storage.setStockItems(next)
-    setItems(next)
+    const nextAll = [...allItems, item]
+    storage.setStockItems(nextAll)
+    setAllItems(nextAll)
 
     setFormData({ code: '', name: '', unit: 'Adet', stock: 0, unitPrice: 0 })
     setIsAdding(false)
   }
 
   const sortedItems = useMemo(() => {
-    // Keep the list stable and "professional" (by code).
-    return [...items].sort((a, b) => a.code.localeCompare(b.code, 'tr'))
-  }, [items])
+    return [...companyItems].sort((a, b) => a.code.localeCompare(b.code, 'tr'))
+  }, [companyItems])
 
   return (
     <div className="space-y-6">

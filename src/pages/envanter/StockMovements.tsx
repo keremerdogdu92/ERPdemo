@@ -1,48 +1,55 @@
 // src/pages/envanter/StockMovements.tsx
-// Summary: Displays stock movement history from localStorage (demo).
-// - Reads movements, stock items, and invoices from storage.
-// - Renders movement type badges and reference labels.
-// - Sorts movements by date descending for better demo readability.
+// Summary: Lists inventory movements (in/out) for the active company.
+// - Shows movement reference for sales invoices and incoming invoices.
 // Integrations:
-// - storage.getStockMovements/getStockItems/getInvoices
-// - formatDate helper for date rendering.
+// - storage.getCompany/getStockMovements/getStockItems/getInvoices/getIncomingInvoices
+// - formatDate helper for date display.
 
-import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '@/lib/utils'
 import { storage } from '@/lib/storage'
 import { Badge } from '@/components/ui/badge'
-import type { StockMovement } from '@/types'
 
 export function StockMovements() {
-  const movements = storage.getStockMovements()
-  const stockItems = storage.getStockItems()
-  const invoices = storage.getInvoices()
+  const company = storage.getCompany()
+  const movementsAll = storage.getStockMovements()
+  const stockItemsAll = storage.getStockItems()
+  const invoicesAll = storage.getInvoices()
+  const incomingInvoicesAll = storage.getIncomingInvoices()
+
+  if (!company) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">Stok Hareketleri</h1>
+        <p className="text-slate-600">Şirket bilgisi bulunamadı. Lütfen önce firma kurulumunu tamamlayın.</p>
+      </div>
+    )
+  }
+
+  const movements = movementsAll.filter((m) => m.companyId === company.id)
+  const stockItems = stockItemsAll.filter((s) => s.companyId === company.id)
+  const invoices = invoicesAll.filter((i) => i.companyId === company.id)
+  const incomingInvoices = incomingInvoicesAll.filter((i) => i.companyId === company.id)
 
   const getStockItemName = (id: string) => {
     return stockItems.find((s) => s.id === id)?.name || 'Bilinmeyen'
   }
 
   const getReferenceInfo = (type: string, id: string) => {
-    // Keep reference labels human-friendly for the demo.
     if (type === 'invoice') {
       const inv = invoices.find((i) => i.id === id)
-      return inv ? `Fatura: ${inv.invoiceNumber}` : `Fatura: ${id}`
+      return inv ? `Fatura: ${inv.invoiceNumber}` : id
     }
+
+    // Backward compatible: some data may use 'purchase' for incoming invoices.
+    if (type === 'purchase' || type === 'incoming-invoice') {
+      const inv = incomingInvoices.find((i) => i.id === id)
+      return inv ? `Gelen Fatura: ${inv.invoiceNumber}` : id
+    }
+
     return `${type}: ${id}`
   }
-
-  const sortedMovements = useMemo(() => {
-    // Show newest items first for a more "live" feel in demos.
-    const list: StockMovement[] = [...movements]
-    list.sort((a, b) => {
-      const da = new Date(a.date).getTime()
-      const db = new Date(b.date).getTime()
-      return db - da
-    })
-    return list
-  }, [movements])
 
   return (
     <div className="space-y-6">
@@ -68,7 +75,7 @@ export function StockMovements() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sortedMovements.map((movement) => (
+                {movements.map((movement) => (
                   <TableRow key={movement.id}>
                     <TableCell>{formatDate(movement.date)}</TableCell>
                     <TableCell>{getStockItemName(movement.stockItemId)}</TableCell>
@@ -85,9 +92,7 @@ export function StockMovements() {
             </Table>
           </div>
 
-          {sortedMovements.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">Henüz stok hareketi yok.</div>
-          )}
+          {movements.length === 0 && <div className="text-center py-8 text-muted-foreground">Henüz stok hareketi yok.</div>}
         </CardContent>
       </Card>
     </div>
