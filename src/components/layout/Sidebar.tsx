@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   FileText,
@@ -8,6 +9,8 @@ import {
   FileCheck,
   Settings,
   LayoutDashboard,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { storage } from '@/lib/storage'
@@ -15,8 +18,28 @@ import { storage } from '@/lib/storage'
 interface MenuItem {
   title: string
   icon: React.ComponentType<{ className?: string }>
-  path: string
+  path?: string
   children?: { title: string; path: string }[]
+  isGroup?: boolean
+}
+
+const STORAGE_KEY_EXPANDED = 'qnowa_sidebar_expanded'
+
+function getExpandedState(): Record<string, boolean> {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_EXPANDED)
+    return stored ? JSON.parse(stored) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveExpandedState(state: Record<string, boolean>) {
+  try {
+    localStorage.setItem(STORAGE_KEY_EXPANDED, JSON.stringify(state))
+  } catch {
+    // Ignore storage errors
+  }
 }
 
 const menuItems: MenuItem[] = [
@@ -26,9 +49,9 @@ const menuItems: MenuItem[] = [
     path: '/',
   },
   {
-    title: 'Fatura Menüsü',
+    title: 'Fatura',
     icon: FileText,
-    path: '/fatura',
+    isGroup: true,
     children: [
       { title: 'Yeni Fatura Oluştur', path: '/fatura/yeni' },
       { title: 'Günlük Z Raporu Giriş', path: '/fatura/z-raporu' },
@@ -36,18 +59,18 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    title: 'Gelen Fatura Menüsü',
+    title: 'Gelen Faturalar',
     icon: FileDown,
-    path: '/gelen-fatura',
+    isGroup: true,
     children: [
       { title: 'Gelen Faturalar', path: '/gelen-fatura/liste' },
       { title: 'Alış Belge Görüntüle', path: '/gelen-fatura/alis' },
     ],
   },
   {
-    title: 'Ödeme ve Tahsilat Menüsü',
+    title: 'Ödeme ve Tahsilat',
     icon: CreditCard,
-    path: '/odeme-tahsilat',
+    isGroup: true,
     children: [
       { title: 'Tahsilat Ekle', path: '/odeme-tahsilat/tahsilat' },
       { title: 'Ödeme Ekle', path: '/odeme-tahsilat/odeme' },
@@ -55,9 +78,9 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
-    title: 'Envanter / Giderler / Hizmetler',
+    title: 'Envanter ve Hizmetler',
     icon: Package,
-    path: '/envanter',
+    isGroup: true,
     children: [
       { title: 'Stok Kartı', path: '/envanter/stok' },
       { title: 'Stok Hareketleri', path: '/envanter/stok-hareketleri' },
@@ -71,13 +94,51 @@ export function Sidebar() {
   const location = useLocation()
   const role = storage.getRole()
   const isMaliMusavir = role === 'mali-musavir'
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
+    const saved = getExpandedState()
+    // Auto-expand groups if current route matches a child
+    const initial: Record<string, boolean> = { ...saved }
+    
+    menuItems.forEach((item) => {
+      if (item.isGroup && item.children) {
+        const hasActiveChild = item.children.some(
+          (child) => location.pathname === child.path || location.pathname.startsWith(child.path + '/')
+        )
+        if (hasActiveChild && initial[item.title] === undefined) {
+          initial[item.title] = true
+        }
+      }
+    })
+
+    if (isMaliMusavir) {
+      const muhasebeGroup = 'Muhasebeleştirme'
+      if (location.pathname.startsWith('/muhasebe') || location.pathname.startsWith('/defter-beyan')) {
+        if (initial[muhasebeGroup] === undefined) {
+          initial[muhasebeGroup] = true
+        }
+      }
+    }
+
+    return initial
+  })
+
+  useEffect(() => {
+    saveExpandedState(expandedGroups)
+  }, [expandedGroups])
+
+  const toggleGroup = (groupTitle: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupTitle]: !prev[groupTitle],
+    }))
+  }
 
   const muhasebeItems: MenuItem[] = isMaliMusavir
     ? [
         {
-          title: 'Muhasebeleştirme Menüsü',
+          title: 'Muhasebeleştirme',
           icon: BookOpen,
-          path: '/muhasebe',
+          isGroup: true,
           children: [
             { title: 'Satış Faturaları', path: '/muhasebe/satis' },
             { title: 'Alış Faturaları', path: '/muhasebe/alis' },
@@ -102,14 +163,62 @@ export function Sidebar() {
         <p className="text-sm text-slate-400">E-Fatura & Muhasebe</p>
       </div>
       <nav className="space-y-2">
-        {allMenuItems.map((item) => (
-          <div key={item.path}>
+        {allMenuItems.map((item) => {
+          if (item.isGroup && item.children) {
+            const isExpanded = expandedGroups[item.title] ?? false
+            const hasActiveChild = item.children.some(
+              (child) => location.pathname === child.path || location.pathname.startsWith(child.path + '/')
+            )
+
+            return (
+              <div key={item.title}>
+                <button
+                  onClick={() => toggleGroup(item.title)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
+                    hasActiveChild
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="text-sm font-medium flex-1 text-left">{item.title}</span>
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                </button>
+                {isExpanded && (
+                  <div className="ml-8 mt-1 space-y-1">
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.path}
+                        to={child.path}
+                        className={cn(
+                          'block px-4 py-2 rounded-lg text-sm transition-colors',
+                          location.pathname === child.path || location.pathname.startsWith(child.path + '/')
+                            ? 'bg-slate-800 text-white'
+                            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        )}
+                      >
+                        {child.title}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          // Regular menu item (Dashboard, Defter Beyan, etc.)
+          return (
             <Link
-              to={item.path}
+              key={item.path}
+              to={item.path!}
               className={cn(
                 'flex items-center gap-3 px-4 py-2 rounded-lg transition-colors',
-                location.pathname === item.path ||
-                  location.pathname.startsWith(item.path + '/')
+                location.pathname === item.path
                   ? 'bg-slate-800 text-white'
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
               )}
@@ -117,26 +226,8 @@ export function Sidebar() {
               <item.icon className="w-5 h-5" />
               <span className="text-sm font-medium">{item.title}</span>
             </Link>
-            {item.children && (
-              <div className="ml-8 mt-1 space-y-1">
-                {item.children.map((child) => (
-                  <Link
-                    key={child.path}
-                    to={child.path}
-                    className={cn(
-                      'block px-4 py-2 rounded-lg text-sm transition-colors',
-                      location.pathname === child.path
-                        ? 'bg-slate-800 text-white'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                    )}
-                  >
-                    {child.title}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+          )
+        })}
         <Link
           to="/ayarlar"
           className={cn(
