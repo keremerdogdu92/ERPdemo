@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils'
 import { storage } from '@/lib/storage'
 import type { UserRole } from '@/types'
+import { RoleModeToggle } from './RoleModeToggle'
 
 interface MenuItem {
   title: string
@@ -134,7 +135,7 @@ export function Sidebar() {
     }))
   }
 
-  const handleRoleToggle = (newRole: UserRole) => {
+  const handleRoleChange = (newRole: UserRole) => {
     if (role !== newRole) {
       setRole(newRole)
       storage.setRole(newRole)
@@ -250,39 +251,7 @@ export function Sidebar() {
         </Link>
       </nav>
 
-      {/* Role Toggle */}
-      <div className="mt-8 pt-4 border-t border-slate-700">
-        <div className="px-2 mb-2">
-          <p className="text-xs text-slate-400 mb-2">Görünüm Modu</p>
-        </div>
-        <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
-          <button
-            onClick={() => handleRoleToggle('mukellef')}
-            className={cn(
-              'flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all',
-              role === 'mukellef'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            )}
-          >
-            Mükellef
-          </button>
-          <button
-            onClick={() => handleRoleToggle('mali-musavir')}
-            className={cn(
-              'flex-1 px-3 py-2 rounded-md text-sm font-medium transition-all',
-              role === 'mali-musavir'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-slate-400 hover:text-white'
-            )}
-          >
-            Mali Müşavir
-          </button>
-        </div>
-        <p className="text-xs text-slate-500 mt-2 px-2 text-center">
-          {role === 'mukellef' ? 'Mükellef Görünümü' : 'Mali Müşavir Görünümü'}
-        </p>
-      </div>
+      <RoleModeToggle role={role} onRoleChange={handleRoleChange} />
     </div>
   )
 }
