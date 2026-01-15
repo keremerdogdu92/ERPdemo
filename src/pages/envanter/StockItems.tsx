@@ -1,4 +1,13 @@
-import { useState } from 'react'
+// src/pages/envanter/StockItems.tsx
+// Summary: Stock item (inventory card) management for the demo.
+// - Lists stock items stored in localStorage via storage.ts.
+// - Allows creating a new stock card with basic validation.
+// - Uses React state for the list so UI updates immediately after save.
+// Integrations:
+// - storage.getCompany/getStockItems/setStockItems
+// - formatCurrency helper for numeric display.
+
+import { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,14 +16,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatCurrency } from '@/lib/utils'
 import { storage } from '@/lib/storage'
 import { Plus } from 'lucide-react'
+import type { StockItem } from '@/types'
 
-function generateId(): string {
-  return `id-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+function safeId(prefix: string) {
+  // Prefer cryptographically strong UUID when available.
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 export function StockItems() {
-  const company = storage.getCompany()!
+  const company = storage.getCompany()
+
+  // Guard for demo safety; avoid hard crash if company is missing.
+  if (!company) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold">Stok Kartı</h1>
+        <p className="text-slate-600">Şirket bilgisi bulunamadı. Lütfen önce firma kurulumunu tamamlayın.</p>
+      </div>
+    )
+  }
+
   const [isAdding, setIsAdding] = useState(false)
+  const [items, setItems] = useState<StockItem[]>(() => storage.getStockItems())
+
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -22,20 +49,53 @@ export function StockItems() {
     stock: 0,
     unitPrice: 0,
   })
-  const stockItems = storage.getStockItems()
 
   const handleSubmit = () => {
-    const item = {
-      id: generateId(),
-      companyId: company.id,
-      ...formData,
-      createdAt: new Date().toISOString(),
+    const code = formData.code.trim()
+    const name = formData.name.trim()
+
+    // Minimal validation for demo credibility.
+    if (!code || !name) {
+      alert('Lütfen stok kodu ve stok adı girin.')
+      return
+    }
+    if (formData.stock < 0 || formData.unitPrice < 0) {
+      alert('Stok miktarı ve birim fiyat negatif olamaz.')
+      return
     }
 
-    storage.setStockItems([...stockItems, item])
+    // Prevent duplicate codes within the same company (demo-safe).
+    const exists = items.some((x) => x.companyId === company.id && x.code.trim().toLowerCase() === code.toLowerCase())
+    if (exists) {
+      alert('Bu stok kodu zaten mevcut. Lütfen farklı bir kod girin.')
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+
+    const item: StockItem = {
+      id: safeId('stk'),
+      companyId: company.id,
+      code,
+      name,
+      unit: formData.unit.trim() || 'Adet',
+      stock: Number(formData.stock) || 0,
+      unitPrice: Number(formData.unitPrice) || 0,
+      createdAt: nowIso,
+    }
+
+    const next = [...items, item]
+    storage.setStockItems(next)
+    setItems(next)
+
     setFormData({ code: '', name: '', unit: 'Adet', stock: 0, unitPrice: 0 })
     setIsAdding(false)
   }
+
+  const sortedItems = useMemo(() => {
+    // Keep the list stable and "professional" (by code).
+    return [...items].sort((a, b) => a.code.localeCompare(b.code, 'tr'))
+  }, [items])
 
   return (
     <div className="space-y-6">
@@ -63,6 +123,7 @@ export function StockItems() {
                   id="code"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                  placeholder="Örn: STK-001"
                 />
               </div>
               <div className="space-y-2">
@@ -71,6 +132,7 @@ export function StockItems() {
                   id="name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Örn: Kulak Kalıbı"
                 />
               </div>
               <div className="space-y-2">
@@ -79,6 +141,7 @@ export function StockItems() {
                   id="unit"
                   value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  placeholder="Örn: Adet"
                 />
               </div>
               <div className="space-y-2">
@@ -87,9 +150,7 @@ export function StockItems() {
                   id="stock"
                   type="number"
                   value={formData.stock}
-                  onChange={(e) =>
-                    setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })
-                  }
+                  onChange={(e) => setFormData({ ...formData, stock: parseFloat(e.target.value) || 0 })}
                 />
               </div>
               <div className="space-y-2">
@@ -98,9 +159,7 @@ export function StockItems() {
                   id="unitPrice"
                   type="number"
                   value={formData.unitPrice}
-                  onChange={(e) =>
-                    setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })
-                  }
+                  onChange={(e) => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
                 />
               </div>
             </div>
@@ -132,7 +191,7 @@ export function StockItems() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {stockItems.map((item) => (
+                {sortedItems.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.code}</TableCell>
                     <TableCell>{item.name}</TableCell>
@@ -145,6 +204,10 @@ export function StockItems() {
               </TableBody>
             </Table>
           </div>
+
+          {sortedItems.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">Henüz stok kartı yok.</div>
+          )}
         </CardContent>
       </Card>
     </div>
